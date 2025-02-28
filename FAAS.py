@@ -11,30 +11,90 @@ from deepface import DeepFace
 import numpy as np
 import cv2
 import time
+import os
+import json
+import redis
+import threading
+from glob import glob
+from tqdm import tqdm
+import random
 
-# # Read and display an image
-# image = cv2.imread('data/MultipleFaces.jpg')
-# cv2.namedWindow('Image', cv2.WINDOW_NORMAL)
-# cv2.imshow('Image', image)
-# # Wait for a key press and close the window
-# cv2.waitKey(0)
-# cv2.destroyAllWindows()
 
-img_path = "data/MultipleFaces2.jpg"
-def landmarks (img_path):
+images_directory = "./data"
+save_path = "./result"
+valid_images = ["*.jpg","*.png","*.jpeg"]
+
+# create a Redis client
+r = redis.Redis(host='localhost', port=6379, db=0)
+
+# create save directory
+if os.path.isdir(save_path) is False:
+    os.mkdir(save_path)
+
+
+def landmarks (images_directory, valid_images):
     start = time.time()
-    faces = RetinaFace.detect_faces(img_path)
-    Time = {"process":{"value":(time.time()-start) * 10**3, "string":f"{(time.time()-start) * 10**3:.2f}:ms"}}
-    faces["Time_landmark"] = Time
-    print(faces)
+    # List of file names
+    filenames = [f for ext in valid_images for f in glob(os.path.join(images_directory, ext))]  
+    # shuffle filenames list
+    random.shuffle(filenames)
+    for img_path in tqdm(filenames, ncols=100, desc="Facial Landmarks"):
+        # using basename function for file name
+        basename = os.path.basename(img_path).split('/')[-1]
+        file_name, file_extension = os.path.splitext(basename)
+        # get facial landmarks from RetinaFace
+        faces = RetinaFace.detect_faces(img_path)
+        # Time = {"process":{"value":(time.time()-start) * 10**3, "string":f"{(time.time()-start) * 10**3:.2f}:ms"}}
+        faces["Time_landmark"] = f"{(time.time()-start) * 10**3:.2f}:ms"
+        # save facial landmarks to redis
+        r.hset(file_name, "LANDMARKS", str(faces))
+        # Store all attributes when they are provided completely
+        if r.hget(file_name, "ANALYZE") is not None:
+            # conver bytes to str
+            dictionary = r.hgetall(file_name)
+            converted_dict = {key.decode(): value.decode() for key, value in dictionary.items()}
+            # save collected data as a JSON fle
+            with open(f"{save_path}/{file_name}.json", "w") as outfile:
+                json.dump(converted_dict, outfile)
+    # print("completed Facial Landmarks")    
+      
 
-def analyze (img_path):
+def analyze (images_directory, valid_images):
     start = time.time()
-    analyze = DeepFace.analyze(img_path = img_path, actions = ['age', 'gender'])
-    analyze = dict(enumerate(analyze,1))
-    Time = {"process":{"value":(time.time()-start) * 10**3, "string":f"{(time.time()-start) * 10**3:.2f}:ms"}}
-    analyze["Time_analyze"] = Time
-    print(analyze)
+    # List of file names
+    filenames = [f for ext in valid_images for f in glob(os.path.join(images_directory, ext))]  
+    # shuffle filenames list
+    random.shuffle(filenames)
+    for img_path in tqdm(filenames, ncols=100, desc="Age/Gender Estimation"):
+        # using basename function for file name
+        basename = os.path.basename(img_path).split('/')[-1]
+        file_name, file_extension = os.path.splitext(basename)
+        # Age/Gender Estimation from DeepFace
+        analyze = DeepFace.analyze(img_path = img_path, actions = ['age', 'gender'], silent = True)
+        analyze = dict(enumerate(analyze,1))
+        analyze["Time_analyze"] = f"{(time.time()-start) * 10**3:.2f}:ms"
+        # save Age/Gender Estimation to redis
+        r.hset(file_name, "ANALYZE", str(analyze))
+        # Store all attributes when they are provided completely
+        if r.hget(file_name, "LANDMARKS") is not None:
+            # conver bytes to str
+            dictionary = r.hgetall(file_name)
+            converted_dict = {key.decode(): value.decode() for key, value in dictionary.items()}
+            # save collected data as a JSON fle
+            with open(f"{save_path}/{file_name}.json", "w") as outfile:
+                json.dump(converted_dict, outfile) 
+    # print("completed Age/Gender Estimation")
 
-landmarks (img_path)
-analyze (img_path)
+# landmarks (images_directory, valid_images)
+# analyze (images_directory, valid_images)
+
+#################################### threads ######################################################
+tracker_thread1 = threading.Thread(target=landmarks, args=[images_directory, valid_images], daemon=True) 
+tracker_thread2 = threading.Thread(target=analyze, args=[images_directory, valid_images], daemon=True) 
+
+# Start the threads
+tracker_thread1.start()
+tracker_thread2.start()
+
+# tracker_thread1.join()
+# tracker_thread2.join()
