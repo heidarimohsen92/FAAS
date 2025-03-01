@@ -89,12 +89,12 @@ def analyze (images_directory, valid_images):
 # analyze (images_directory, valid_images)
 
 #################################### threads ######################################################
-tracker_thread1 = threading.Thread(target=landmarks, args=[images_directory, valid_images], daemon=True) 
-tracker_thread2 = threading.Thread(target=analyze, args=[images_directory, valid_images], daemon=True) 
+thread1 = threading.Thread(target=landmarks, args=[images_directory, valid_images], daemon=True) 
+thread2 = threading.Thread(target=analyze, args=[images_directory, valid_images], daemon=True) 
 
 # Start the threads
-tracker_thread1.start()
-tracker_thread2.start()
+thread1.start()
+thread2.start()
 
 # tracker_thread1.join()
 # tracker_thread2.join()
