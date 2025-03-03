@@ -56,6 +56,8 @@ def landmarks (images_directory, valid_images):
             # save collected data as a JSON fle
             with open(f"{save_path}/{file_name}.json", "w") as outfile:
                 json.dump(converted_dict, outfile)
+            # remove completed file from Redis
+            r.delete(file_name)
     # print("completed Facial Landmarks")    
       
 
@@ -82,7 +84,9 @@ def analyze (images_directory, valid_images):
             converted_dict = {key.decode(): value.decode() for key, value in dictionary.items()}
             # save collected data as a JSON fle
             with open(f"{save_path}/{file_name}.json", "w") as outfile:
-                json.dump(converted_dict, outfile) 
+                json.dump(converted_dict, outfile)
+            # remove completed file from Redis
+            r.delete(file_name)
     # print("completed Age/Gender Estimation")
 
 # landmarks (images_directory, valid_images)
@@ -95,6 +99,6 @@ thread2 = threading.Thread(target=analyze, args=[images_directory, valid_images]
 # Start the threads
 thread1.start()
 thread2.start()
-
+print("completed all attributes")
 # tracker_thread1.join()
 # tracker_thread2.join()
